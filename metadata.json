@@ -1,0 +1,6 @@
+{
+  "name": "WarrantyEase",
+  "description": "Personal warranty and document management SaaS platform to track product invoices, warranties, expiry reminders, and claim documents.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
