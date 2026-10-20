@@ -38,6 +38,8 @@ interface WarrantyContextType {
   clearNotification: (id: string) => Promise<boolean>;
   updatePreferences: (data: Partial<UserPreferences>) => Promise<UserPreferences>;
   resetDemoData: () => Promise<void>;
+  scanAndTrigger30DayAlerts: () => Promise<{ scannedCount: number; expiringSoonCount: number }>;
+  simulateExpiringWarranty: (productName?: string, brand?: string, daysUntilExpiry?: number) => Promise<Warranty>;
 }
 
 const WarrantyContext = createContext<WarrantyContextType | undefined>(undefined);
@@ -198,6 +200,47 @@ export const WarrantyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const scanAndTrigger30DayAlerts = async () => {
+    try {
+      const res = await api.syncExpiryAlerts();
+      await refreshData();
+      if (res.newAlertsCreated > 0) {
+        showToast(
+          `30-day scan complete: ${res.newAlertsCreated} new expiry alert${res.newAlertsCreated > 1 ? 's' : ''} triggered (${res.expiringSoonCount} total products expiring soon).`,
+          'info'
+        );
+      } else {
+        showToast(
+          `30-day scan complete: ${res.scannedCount} registered products verified. ${res.expiringSoonCount} within 30-day alert window.`,
+          'info'
+        );
+      }
+      return { scannedCount: res.scannedCount, expiringSoonCount: res.expiringSoonCount };
+    } catch (err) {
+      showToast('Failed to scan registered products for expiry alerts.', 'error');
+      return { scannedCount: warranties.length, expiringSoonCount: 0 };
+    }
+  };
+
+  const simulateExpiringWarranty = async (
+    productName?: string,
+    brand?: string,
+    daysUntilExpiry = 21
+  ) => {
+    try {
+      const created = await api.createSimulatedExpiringWarranty(productName, brand, daysUntilExpiry);
+      await refreshData();
+      showToast(
+        `Registered "${created.productName}" (expires in ${daysUntilExpiry} days). 30-day visual alert triggered!`,
+        'success'
+      );
+      return created;
+    } catch (err) {
+      showToast('Failed to simulate registering product.', 'error');
+      throw err;
+    }
+  };
+
   return (
     <WarrantyContext.Provider
       value={{
@@ -222,6 +265,8 @@ export const WarrantyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         clearNotification,
         updatePreferences,
         resetDemoData,
+        scanAndTrigger30DayAlerts,
+        simulateExpiringWarranty,
       }}
     >
       {children}

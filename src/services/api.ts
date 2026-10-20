@@ -13,7 +13,7 @@ import {
   INITIAL_USER_PREFERENCES,
   SAMPLE_EXTRACTED_INVOICE 
 } from '../data/demoData';
-import { calculateRemainingDays, formatDisplayDate } from '../utils/dateUtils';
+import { calculateRemainingDays, formatDisplayDate, getReferenceDate } from '../utils/dateUtils';
 import { getWarrantyStatus } from '../utils/warrantyUtils';
 
 const STORAGE_KEYS = {
@@ -79,6 +79,17 @@ export interface IApiService {
   createDocument(doc: Omit<WarrantyDocument, 'id' | 'uploadedAt'>): Promise<WarrantyDocument>;
   deleteDocument(id: string): Promise<boolean>;
   getNotifications(): Promise<NotificationItem[]>;
+  syncExpiryAlerts(): Promise<{
+    scannedCount: number;
+    expiringSoonCount: number;
+    newAlertsCreated: number;
+    notifications: NotificationItem[];
+  }>;
+  createSimulatedExpiringWarranty(
+    productName?: string,
+    brand?: string,
+    daysUntilExpiry?: number
+  ): Promise<Warranty>;
   markNotificationAsRead(id: string): Promise<void>;
   markAllNotificationsAsRead(): Promise<void>;
   clearNotification(id: string): Promise<boolean>;
@@ -251,9 +262,117 @@ export const api: IApiService = {
     return true;
   },
 
+  /**
+   * Evaluates all registered warranties and triggers visual alerts 30 days before expiry
+   */
+  async syncExpiryAlerts(): Promise<{
+    scannedCount: number;
+    expiringSoonCount: number;
+    newAlertsCreated: number;
+    notifications: NotificationItem[];
+  }> {
+    const warranties = loadFromStorage<Warranty[]>(STORAGE_KEYS.WARRANTIES, INITIAL_WARRANTIES);
+    const notifs = loadFromStorage<NotificationItem[]>(STORAGE_KEYS.NOTIFICATIONS, INITIAL_NOTIFICATIONS);
+    let newCreated = 0;
+    const updated = [...notifs];
+
+    const expiringWarranties = warranties.filter((w) => {
+      const days = calculateRemainingDays(w.warrantyExpiryDate);
+      return days >= 0 && days <= 30;
+    });
+
+    for (const w of expiringWarranties) {
+      const days = calculateRemainingDays(w.warrantyExpiryDate);
+      const existingIdx = updated.findIndex(
+        (n) => n.warrantyId === w.id && n.type === 'expiring_soon'
+      );
+
+      if (existingIdx === -1) {
+        // Trigger a new 30-day visual alert notification
+        const alertNotif: NotificationItem = {
+          id: `notif-30d-${w.id}-${Date.now()}`,
+          warrantyId: w.id,
+          productName: w.productName,
+          brand: w.brand,
+          type: 'expiring_soon',
+          title: `30-Day Alert: Warranty expires in ${days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'}`}`,
+          message: `Your manufacturer warranty coverage for ${w.productName} (${w.brand}) expires on ${formatDisplayDate(w.warrantyExpiryDate)}. Submit any defect or repair tickets before protection lapses.`,
+          daysRemaining: days,
+          expiryDate: w.warrantyExpiryDate,
+          createdAt: new Date().toISOString(),
+          isRead: false,
+        };
+        updated.unshift(alertNotif);
+        newCreated++;
+      } else {
+        // Update daysRemaining & message to keep alert fresh
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          daysRemaining: days,
+          brand: w.brand,
+          expiryDate: w.warrantyExpiryDate,
+          title: `30-Day Alert: Warranty expires in ${days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'}`}`,
+        };
+      }
+    }
+
+    saveToStorage(STORAGE_KEYS.NOTIFICATIONS, updated);
+    return {
+      scannedCount: warranties.length,
+      expiringSoonCount: expiringWarranties.length,
+      newAlertsCreated: newCreated,
+      notifications: updated,
+    };
+  },
+
   async getNotifications(): Promise<NotificationItem[]> {
     await delay(80);
-    return loadFromStorage<NotificationItem[]>(STORAGE_KEYS.NOTIFICATIONS, INITIAL_NOTIFICATIONS);
+    // Automatically evaluate registered warranties against 30-day trigger threshold
+    const { notifications } = await this.syncExpiryAlerts();
+    return notifications;
+  },
+
+  /**
+   * Helper to register a test product expiring in the 30-day alert window
+   */
+  async createSimulatedExpiringWarranty(
+    productName = 'Sony PlayStation 5 DualSense Edge Controller',
+    brand = 'Sony Interactive',
+    daysUntilExpiry = 21
+  ): Promise<Warranty> {
+    const ref = getReferenceDate();
+    const expiryDate = new Date(ref.getTime() + daysUntilExpiry * 24 * 60 * 60 * 1000);
+    const expiryDateStr = expiryDate.toISOString().split('T')[0];
+    const purchaseDate = new Date(ref.getTime() - 344 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const newWarranty = await this.createWarranty({
+      userId: 'user-demo',
+      productName,
+      brand,
+      category: 'Electronics',
+      seller: 'Best Buy Retail',
+      invoiceNumber: `INV-BB-${Math.floor(100000 + Math.random() * 900000)}`,
+      purchaseDate,
+      purchasePrice: 199.99,
+      currency: 'USD',
+      warrantyStartDate: purchaseDate,
+      warrantyDurationMonths: 12,
+      warrantyExpiryDate: expiryDateStr,
+      serialNumber: `PS5-CTRL-${Math.floor(10000 + Math.random() * 90000)}`,
+      coverageSummary: 'Sony 1-Year Limited Warranty covering stick drift, haptic triggers, and internal battery.',
+      exclusions: ['Accidental liquid spill', 'Severe drop damage', 'Unauthorized disassembly'],
+      claimRequirements: ['Original purchase receipt', 'Serial number confirmation'],
+      claimContact: {
+        phone: '1-800-345-7669',
+        url: 'https://support.playstation.com',
+        supportHours: 'Mon-Fri 9am-6pm PST',
+      },
+      documentIds: [],
+    });
+
+    // Re-sync to immediately trigger the 30-day alert
+    await this.syncExpiryAlerts();
+    return newWarranty;
   },
 
   async markNotificationAsRead(id: string): Promise<void> {

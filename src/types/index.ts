@@ -64,10 +64,12 @@ export interface NotificationItem {
   id: string;
   warrantyId: string;
   productName: string;
+  brand?: string;
   type: NotificationType;
   title: string;
   message: string;
   daysRemaining?: number;
+  expiryDate?: string;
   createdAt: string;
   isRead: boolean;
 }

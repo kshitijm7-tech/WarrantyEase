@@ -12,7 +12,8 @@ import {
   ArrowRight,
   Calendar,
   FileCheck2,
-  Bot
+  Bot,
+  Bell
 } from 'lucide-react';
 import { useWarranties } from '../context/WarrantyContext';
 import { StatusBadge } from '../components/ui/StatusBadge';
@@ -307,6 +308,15 @@ export const OverviewPage: React.FC = () => {
                     Next 15d
                   </button>
                 </div>
+
+                <Link
+                  to="/notifications"
+                  className="hidden md:inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#9A6700] bg-[#FFF5D9] hover:bg-[#FCE6A8] border border-[#FCE6A8] px-2.5 py-1 rounded-md transition-colors"
+                  title="View active 30-day visual expiry alerts"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>30-Day Alerts ({metrics.expiringSoonWarranties})</span>
+                </Link>
 
                 <Link
                   to="/warranties?status=expiring_soon"
