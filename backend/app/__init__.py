@@ -1,0 +1,1 @@
+"""WarrantyEase API - Backend for personal warranty management."""

@@ -1,0 +1,29 @@
+# WarrantyEase API - Docker Compose for Local Development
+# Starts DynamoDB Local only.
+#
+# Usage:
+#   docker-compose up -d        # Start in background
+#   docker-compose logs -f      # View logs
+#   docker-compose down         # Stop and remove
+#
+# Note: Requires Docker Desktop or Docker Engine installed.
+
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: warrantease-dynamodb
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - warrantease-network
+
+networks:
+  warrantease-network:
+    driver: bridge

@@ -1,0 +1,20 @@
+# WarrantyEase API - Python Dependencies
+# Core
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+# AWS
+boto3==1.35.90
+
+# Configuration
+pydantic-settings==2.5.2
+pydantic==2.9.2
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.23.7
+httpx==0.28.1
+
+# Type checking (optional, for development)
+# mypy==1.13.0
+# types-requests==2.32.2
